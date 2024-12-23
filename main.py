@@ -40,6 +40,23 @@ class UserUpdate(BaseModel):
     address_residential: str
     bank_account_number: int
 
+class ReportResponse(BaseModel):
+    id: int
+    point_departure: str
+    type_point_departure: str
+    sender: str
+    point_destination: str
+    type_point_destination: str
+    recipient: str
+    view_wood: str
+    length_wood: int
+    volume_wood: float
+    report_date_time: str
+    assortment_wood_type: str
+    variety_wood_type: str
+    user_id: int
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -157,3 +174,18 @@ async def get_user_car(user_id: int, db: Session = Depends(get_db)):
     }
 
     return car_details
+
+
+@app.get("/reports/user/{user_id}", response_model=list[ReportResponse])
+async def get_reports_by_user(user_id: int, db: Session = Depends(get_db)):
+    """Получение отчетов для конкретного пользователя"""
+    reports = db.query(Report).filter(Report.user_id == user_id).all()
+
+    if not reports:
+        raise HTTPException(status_code=404, detail="Нет отчетов для данного пользователя")
+
+    # Преобразование report_date_time в строку
+    return [{
+        **report.__dict__,
+        "report_date_time": report.report_date_time.isoformat()  # Преобразуем дату в строку
+    } for report in reports]

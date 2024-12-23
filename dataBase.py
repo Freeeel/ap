@@ -102,6 +102,6 @@ class Name(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(50), nullable=False)
 
-engine = create_engine("postgresql://postgres:8696@localhost:5432/baseUchet", echo=True)
+engine = create_engine("postgresql://dmitriy:TTQP62aQZRIqYduF6QLEPOo8HFnfk3Ip@dpg-ctkr0lqj1k6c73crpck0-a:5432/uchetperevozki", echo=True)
 
 Base.metadata.create_all(engine)
