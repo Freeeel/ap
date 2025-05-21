@@ -4,20 +4,50 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm import joinedload
 from dataBase import *
 from datetime import datetime
+
 app = FastAPI()
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
 #python -m  uvicorn main:app --reload --host 172.20.10.11
 
 class UserLogin(BaseModel):
     login: str
     password: str
 
+
 class RepairCreate(BaseModel):
     description_breakdown: str
     date_and_time_repair: str  # Формат: YYYY-MM-DD
     address_point_repair: str
     user_id: int
+
+class UserResponse(BaseModel):
+    id: int
+    name: str
+    surname: str
+    patronymic: str
+    phone: str
+    date_of_birthday: str  # Или использовать datetime, если хотите
+    address_residential: str
+    bank_account_number: int
+    role_id: int
+    login: str
+    password: str
+
+class UserCreate(BaseModel):
+    name: str
+    surname: str
+    patronymic: str
+    phone: str
+    date_of_birthday: str
+    address_residential: str
+    bank_account_number: int
+    login: str
+    password: str
+    role_id: int = 1
+
 
 class ReportCreate(BaseModel):
     point_departure: str
@@ -34,12 +64,17 @@ class ReportCreate(BaseModel):
     variety_wood_type: str
     user_id: int
 
-class UserUpdate(BaseModel):
 
+class UserUpdate(BaseModel):
+    name: str
+    surname: str
+    patronymic: str
     phone: str
-    password: str
     address_residential: str
     bank_account_number: int
+    login: str
+    password: str
+
 
 class ReportResponse(BaseModel):
     id: int
@@ -66,8 +101,6 @@ def get_db():
         db.close()
 
 
-
-
 @app.post("/login")
 async def login(user_login: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.login == user_login.login, User.password == user_login.password).first()
@@ -86,6 +119,7 @@ async def login(user_login: UserLogin, db: Session = Depends(get_db)):
         "bank_account_number": db_user.bank_account_number,
         "role_id": db_user.role_id,
         "password": db_user.password,
+        "login": db_user.login
     }
 
 
@@ -109,12 +143,13 @@ async def get_user(user_id: int, db: Session = Depends(get_db)):
         "address_residential": db_user.address_residential,
         "bank_account_number": db_user.bank_account_number,
         "role_id": db_user.role_id,
+        "password": db_user.password,
+        "login": db_user.login
     }
 
 
 @app.post("/repairs/")
 async def create_repair(repair: RepairCreate, db: Session = Depends(get_db)):
-
     new_repair = Repair(
         description_breakdown=repair.description_breakdown,
         date_and_time_repair=repair.date_and_time_repair,
@@ -159,27 +194,63 @@ async def create_report(report: ReportCreate, db: Session = Depends(get_db)):
     return new_report
 
 
+# @app.put("/users/{user_id}")
+# async def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
+#     db_user = db.query(User).filter(User.id == user_id).first()
+#
+#     if db_user is None:
+#         raise HTTPException(status_code=404, detail="User not found")
+#
+#     db_user.password = user_update.password
+#     db_user.phone = user_update.phone
+#     db_user.address_residential = user_update.address_residential
+#     db_user.bank_account_number = user_update.bank_account_number
+#
+#     try:
+#         db.commit()
+#         db.refresh(db_user)
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(status_code=400, detail="Could not update user")
+#
+#     return db_user
+
 @app.put("/users/{user_id}")
 async def update_user(user_id: int, user_update: UserUpdate, db: Session = Depends(get_db)):
+    # Get the user from the database
     db_user = db.query(User).filter(User.id == user_id).first()
 
-    if db_user is None:
+    # Raise an exception if the user is not found
+    if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db_user.password = user_update.password
+    # Update fields
+    db_user.name = user_update.name
+    db_user.surname = user_update.surname
+    db_user.patronymic = user_update.patronymic
     db_user.phone = user_update.phone
     db_user.address_residential = user_update.address_residential
     db_user.bank_account_number = user_update.bank_account_number
+    db_user.login = user_update.login
+    db_user.password = user_update.password
 
     try:
         db.commit()
         db.refresh(db_user)
+        return {
+            "id": db_user.id,
+            "name": db_user.name,
+            "surname": db_user.surname,
+            "patronymic": db_user.patronymic,
+            "phone": db_user.phone,
+            "address_residential": db_user.address_residential,
+            "bank_account_number": db_user.bank_account_number,
+            "login": db_user.login,
+            "password": db_user.password,
+        }
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail="Could not update user")
-
-    return db_user
-
+        raise HTTPException(status_code=500, detail="Failed to update user")
 
 @app.get("/user/{user_id}/car")
 async def get_user_car(user_id: int, db: Session = Depends(get_db)):
@@ -211,3 +282,77 @@ async def get_reports_by_user(user_id: int, db: Session = Depends(get_db)):
         **report.__dict__,
         "report_date_time": report.report_date_time.isoformat()  # Преобразуем дату в строку
     } for report in reports]
+
+
+@app.get("/reports/all", response_model=list[ReportResponse])
+async def get_all_reports(db: Session = Depends(get_db)):
+    reports = db.query(Report).all()
+    if not reports:
+        raise HTTPException(status_code=404, detail="В базе данных нет отчетов")
+    return [{
+        **report.__dict__,
+        "report_date_time": report.report_date_time.isoformat()  # Преобразуем дату в строку
+    } for report in reports]
+
+@app.get("/users/role/1", response_model=list[UserResponse])
+async def get_users_with_role_1(db: Session = Depends(get_db)):
+    users = db.query(User).filter(User.role_id == 1).all()
+
+    if not users:
+        raise HTTPException(status_code=404, detail="Пользователи с role_id 1 не найдены")
+
+    return [UserResponse(
+        id=user.id,
+        name=user.name,
+        surname=user.surname,
+        patronymic=user.patronymic,
+        phone=user.phone,
+        date_of_birthday=user.date_of_birthday.isoformat(),  # Преобразование в строку, если нужно
+        address_residential=user.address_residential,
+        bank_account_number=user.bank_account_number,
+        role_id=user.role_id,
+        login=user.login,
+        password=user.password
+    ) for user in users]
+
+
+@app.post("/users/", response_model=UserResponse)
+async def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    try:
+        date_of_birthday = datetime.strptime(user.date_of_birthday, '%Y-%m-%d').date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    # Create a new user object
+    db_user = User(
+        name=user.name,
+        surname=user.surname,
+        patronymic=user.patronymic,
+        phone=user.phone,
+        date_of_birthday=date_of_birthday,
+        address_residential=user.address_residential,
+        bank_account_number=user.bank_account_number,
+        login=user.login,
+        password=user.password,
+        role_id=1  # Set role_id to 1
+    )
+    try:
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+        # Return the created user
+        return UserResponse(
+            id=db_user.id,
+            name=db_user.name,
+            surname=db_user.surname,
+            patronymic=db_user.patronymic,
+            phone=db_user.phone,
+            date_of_birthday=db_user.date_of_birthday.isoformat(),
+            address_residential=db_user.address_residential,
+            bank_account_number=db_user.bank_account_number,
+            role_id=db_user.role_id,
+            login=db_user.login,
+            password=db_user.password
+        )
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create user")
